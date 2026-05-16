@@ -75,7 +75,7 @@ function parseArray(buffer: Buffer, start: number): ParseResult {
     if (!lengthLine) return null;
 
     const length = parseLength(lengthLine.line);
-    if (length > MAX_BULK_LENGTH) throw new ProtocolError('invalid bulk length');
+    if (length < 0 || length > MAX_BULK_LENGTH) throw new ProtocolError('invalid bulk length');
 
     const end = lengthLine.next + length;
     if (end + 2 > buffer.length) return null;

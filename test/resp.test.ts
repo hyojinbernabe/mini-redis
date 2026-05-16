@@ -74,6 +74,7 @@ describe('RespParser', () => {
   it('rejects malformed input', () => {
     expect(() => new RespParser().feed(Buffer.from('*1\r\n+PING\r\n'))).toThrow(ProtocolError);
     expect(() => new RespParser().feed(Buffer.from('*x\r\n'))).toThrow(ProtocolError);
+    expect(() => new RespParser().feed(Buffer.from('*1\r\n$-5\r\n'))).toThrow(ProtocolError);
     expect(() => new RespParser().feed(Buffer.from('*1\r\n$2\r\nabcd\r\n'))).toThrow(ProtocolError);
   });
 });
