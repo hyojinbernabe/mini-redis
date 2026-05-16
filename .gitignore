@@ -1,0 +1,8 @@
+node_modules/
+dist/
+coverage/
+*.aof
+*.aof.rewrite
+*.cpuprofile
+.env
+.DS_Store
