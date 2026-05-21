@@ -6,6 +6,8 @@ import { Store } from './store.ts';
 export interface ServerOptions {
   port: number;
   host: string;
+  // for tests, lets them control time
+  now?: () => number;
 }
 
 export interface RunningServer {
@@ -15,7 +17,7 @@ export interface RunningServer {
 }
 
 export async function startServer(options: ServerOptions): Promise<RunningServer> {
-  const store = new Store();
+  const store = new Store(options.now);
   const ctx: CommandContext = {
     store,
   };
