@@ -1,4 +1,5 @@
 import { errorReply } from '../resp.ts';
+import { keyCommands } from './keys.ts';
 import { serverCommands } from './server.ts';
 import { stringCommands } from './strings.ts';
 import { type Command, type CommandContext, CommandError } from './types.ts';
@@ -9,6 +10,7 @@ const commands = new Map<string, Command>(
   Object.entries({
     ...serverCommands,
     ...stringCommands,
+    ...keyCommands,
   }),
 );
 
