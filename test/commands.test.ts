@@ -18,6 +18,9 @@ describe('errors', () => {
   it('checks the number of arguments', () => {
     expect(run(ctx, 'GET')).toBe("-ERR wrong number of arguments for 'get' command\r\n");
     expect(run(ctx, 'GET', 'a', 'b')).toBe("-ERR wrong number of arguments for 'get' command\r\n");
+    expect(run(ctx, 'MSET', 'a', '1', 'b')).toBe(
+      "-ERR wrong number of arguments for 'mset' command\r\n",
+    );
   });
 
   it('command names are case insensitive', () => {
@@ -52,5 +55,65 @@ describe('strings', () => {
       "-ERR invalid expire time in 'set' command\r\n",
     );
     expect(run(ctx, 'SET', 'k', 'v', 'FOREVER')).toBe('-ERR syntax error\r\n');
+  });
+
+  it('INCR, DECR, INCRBY, DECRBY', () => {
+    expect(run(ctx, 'INCR', 'counter')).toBe(':1\r\n');
+    expect(run(ctx, 'INCRBY', 'counter', '10')).toBe(':11\r\n');
+    expect(run(ctx, 'DECR', 'counter')).toBe(':10\r\n');
+    expect(run(ctx, 'DECRBY', 'counter', '15')).toBe(':-5\r\n');
+    expect(run(ctx, 'GET', 'counter')).toBe('$2\r\n-5\r\n');
+  });
+
+  it('INCR refuses values that are not integers', () => {
+    run(ctx, 'SET', 'k', 'abc');
+    expect(run(ctx, 'INCR', 'k')).toBe('-ERR value is not an integer or out of range\r\n');
+    run(ctx, 'SET', 'k', '007');
+    expect(run(ctx, 'INCR', 'k')).toBe('-ERR value is not an integer or out of range\r\n');
+    expect(run(ctx, 'INCRBY', 'n', '1.5')).toBe('-ERR value is not an integer or out of range\r\n');
+  });
+
+  it('INCR stays inside 64 bit signed integers', () => {
+    run(ctx, 'SET', 'big', '9223372036854775806');
+    expect(run(ctx, 'INCR', 'big')).toBe(':9223372036854775807\r\n');
+    expect(run(ctx, 'INCR', 'big')).toBe('-ERR increment or decrement would overflow\r\n');
+    expect(run(ctx, 'GET', 'big')).toBe('$19\r\n9223372036854775807\r\n');
+  });
+
+  it('APPEND and STRLEN', () => {
+    expect(run(ctx, 'APPEND', 'greeting', 'hello')).toBe(':5\r\n');
+    expect(run(ctx, 'APPEND', 'greeting', ' world')).toBe(':11\r\n');
+    expect(run(ctx, 'GET', 'greeting')).toBe('$11\r\nhello world\r\n');
+    expect(run(ctx, 'STRLEN', 'greeting')).toBe(':11\r\n');
+  });
+
+  it('MSET and MGET', () => {
+    expect(run(ctx, 'MSET', 'a', '1', 'b', '2')).toBe('+OK\r\n');
+    expect(run(ctx, 'MGET', 'a', 'missing', 'b')).toBe('*3\r\n$1\r\n1\r\n$-1\r\n$1\r\n2\r\n');
+  });
+});
+
+describe('keys', () => {
+  it('DEL and EXISTS count keys', () => {
+    run(ctx, 'MSET', 'a', '1', 'b', '2');
+    expect(run(ctx, 'EXISTS', 'a', 'a', 'b', 'c')).toBe(':3\r\n');
+    expect(run(ctx, 'DEL', 'a', 'c')).toBe(':1\r\n');
+    expect(run(ctx, 'EXISTS', 'a')).toBe(':0\r\n');
+  });
+
+  it('KEYS matches glob patterns', () => {
+    run(ctx, 'MSET', 'user:1', 'a', 'user:2', 'b', 'session:1', 'c', 'h?llo', 'd');
+    const keys = (pattern: string) =>
+      run(ctx, 'KEYS', pattern)
+        .split('\r\n')
+        .filter((line) => line && !/^[*$]/.test(line))
+        .sort();
+
+    expect(keys('user:*')).toEqual(['user:1', 'user:2']);
+    expect(keys('*:1')).toEqual(['session:1', 'user:1']);
+    expect(keys('user:[13]')).toEqual(['user:1']);
+    expect(keys('user:[!1]')).toEqual(['user:2']);
+    expect(keys('h\\?llo')).toEqual(['h?llo']);
+    expect(keys('*')).toHaveLength(4);
   });
 });
