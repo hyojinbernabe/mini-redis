@@ -71,6 +71,19 @@ describe('RespParser', () => {
     expect(command[2].equals(value)).toBe(true);
   });
 
+  it('parses inline commands', () => {
+    const parser = new RespParser();
+    expect(toStrings(parser.feed(Buffer.from('SET  foo bar\r\nPING\n')))).toEqual([
+      ['SET', 'foo', 'bar'],
+      ['PING'],
+    ]);
+  });
+
+  it('skips empty arrays and empty inline lines', () => {
+    const parser = new RespParser();
+    expect(toStrings(parser.feed(Buffer.from('*0\r\n\r\nPING\r\n')))).toEqual([['PING']]);
+  });
+
   it('rejects malformed input', () => {
     expect(() => new RespParser().feed(Buffer.from('*1\r\n+PING\r\n'))).toThrow(ProtocolError);
     expect(() => new RespParser().feed(Buffer.from('*x\r\n'))).toThrow(ProtocolError);

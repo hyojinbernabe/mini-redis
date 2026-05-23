@@ -1,6 +1,7 @@
 // RESP (REdis Serialization Protocol) parsing and encoding.
 // clients send commands as arrays of bulk strings:
 //   *2\r\n$3\r\nGET\r\n$3\r\nfoo\r\n
+// redis-cli also accepts "inline" commands typed by hand, like `PING\r\n`.
 
 const STAR = 0x2a; // '*'
 const DOLLAR = 0x24; // '$'
@@ -22,10 +23,8 @@ export class RespParser {
     const commands: Buffer[][] = [];
 
     while (this.buffer.length > 0) {
-      if (this.buffer[0] !== STAR) {
-        throw new ProtocolError(`expected '*', got '${String.fromCharCode(this.buffer[0])}'`);
-      }
-      const result = parseArray(this.buffer, 0);
+      const result =
+        this.buffer[0] === STAR ? parseArray(this.buffer, 0) : parseInline(this.buffer, 0);
       if (!result) break;
       if (result.args.length > 0) commands.push(result.args);
       this.buffer = this.buffer.subarray(result.next);
@@ -88,6 +87,22 @@ function parseArray(buffer: Buffer, start: number): ParseResult {
   }
 
   return { args, next: offset };
+}
+
+function parseInline(buffer: Buffer, start: number): ParseResult {
+  const newline = buffer.indexOf(0x0a, start);
+  if (newline === -1) {
+    if (buffer.length - start > MAX_INLINE_LENGTH) throw new ProtocolError('too big inline request');
+    return null;
+  }
+
+  const line = buffer.toString('utf8', start, newline).replace(/\r$/, '');
+  const args = line
+    .split(/\s+/)
+    .filter((part) => part.length > 0)
+    .map((part) => Buffer.from(part));
+
+  return { args, next: newline + 1 };
 }
 
 // encoding replies
