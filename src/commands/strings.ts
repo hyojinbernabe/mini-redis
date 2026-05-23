@@ -1,4 +1,4 @@
-import { NULL_BULK, OK, bulkString, integerReply } from '../resp.ts';
+import { NULL_BULK, OK, arrayReply, bulkString, integerReply } from '../resp.ts';
 import {
   type Command,
   type CommandContext,
@@ -79,6 +79,26 @@ const get: Command = {
   },
 };
 
+const strlen: Command = {
+  arity: 2,
+  write: false,
+  run(args, ctx) {
+    return integerReply(getString(ctx, args[1].toString())?.length ?? 0);
+  },
+};
+
+const append: Command = {
+  arity: 3,
+  write: true,
+  run(args, ctx) {
+    const key = args[1].toString();
+    const current = getString(ctx, key);
+    const data = current ? Buffer.concat([current, args[2]]) : args[2];
+    ctx.store.put(key, { type: 'string', data });
+    return integerReply(data.length);
+  },
+};
+
 function incrementBy(ctx: CommandContext, key: string, increment: bigint): Buffer {
   const current = getString(ctx, key);
   const value = current === null ? 0n : parseBigInt(current);
@@ -118,11 +138,37 @@ const decrby: Command = {
   },
 };
 
+const mget: Command = {
+  arity: -2,
+  write: false,
+  run(args, ctx) {
+    return arrayReply(args.slice(1).map((arg) => bulkString(getString(ctx, arg.toString()))));
+  },
+};
+
+const mset: Command = {
+  arity: -3,
+  write: true,
+  run(args, ctx) {
+    if (args.length % 2 === 0) {
+      throw new CommandError("ERR wrong number of arguments for 'mset' command");
+    }
+    for (let i = 1; i < args.length; i += 2) {
+      ctx.store.set(args[i].toString(), { type: 'string', data: args[i + 1] });
+    }
+    return OK;
+  },
+};
+
 export const stringCommands: Record<string, Command> = {
   set,
   get,
+  strlen,
+  append,
   incr,
   decr,
   incrby,
   decrby,
+  mget,
+  mset,
 };
