@@ -1,5 +1,15 @@
-import { NULL_BULK, OK, bulkString } from '../resp.ts';
-import { type Command, CommandError, SYNTAX_ERROR, getString, parseInteger } from './types.ts';
+import { NULL_BULK, OK, bulkString, integerReply } from '../resp.ts';
+import {
+  type Command,
+  type CommandContext,
+  CommandError,
+  NOT_INTEGER,
+  SYNTAX_ERROR,
+  fitsInt64,
+  getString,
+  parseBigInt,
+  parseInteger,
+} from './types.ts';
 
 interface SetOptions {
   expireAt: number | null;
@@ -69,4 +79,50 @@ const get: Command = {
   },
 };
 
-export const stringCommands: Record<string, Command> = { set, get };
+function incrementBy(ctx: CommandContext, key: string, increment: bigint): Buffer {
+  const current = getString(ctx, key);
+  const value = current === null ? 0n : parseBigInt(current);
+  const result = value + increment;
+  if (!fitsInt64(result)) throw new CommandError('ERR increment or decrement would overflow');
+
+  ctx.store.put(key, { type: 'string', data: Buffer.from(result.toString()) });
+  return integerReply(result);
+}
+
+const incr: Command = {
+  arity: 2,
+  write: true,
+  run: (args, ctx) => incrementBy(ctx, args[1].toString(), 1n),
+};
+
+const decr: Command = {
+  arity: 2,
+  write: true,
+  run: (args, ctx) => incrementBy(ctx, args[1].toString(), -1n),
+};
+
+const incrby: Command = {
+  arity: 3,
+  write: true,
+  run: (args, ctx) => incrementBy(ctx, args[1].toString(), parseBigInt(args[2])),
+};
+
+const decrby: Command = {
+  arity: 3,
+  write: true,
+  run(args, ctx) {
+    const amount = parseBigInt(args[2]);
+    // -(-2^63) doesn't fit in 64 bits
+    if (!fitsInt64(-amount)) throw new CommandError(NOT_INTEGER);
+    return incrementBy(ctx, args[1].toString(), -amount);
+  },
+};
+
+export const stringCommands: Record<string, Command> = {
+  set,
+  get,
+  incr,
+  decr,
+  incrby,
+  decrby,
+};
