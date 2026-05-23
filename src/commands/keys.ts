@@ -1,4 +1,5 @@
-import { integerReply } from '../resp.ts';
+import { globToRegExp } from '../glob.ts';
+import { OK, arrayReply, bulkString, integerReply, simpleString } from '../resp.ts';
 import { type Command, type CommandContext, CommandError, parseInteger } from './types.ts';
 
 const del: Command = {
@@ -22,6 +23,14 @@ const exists: Command = {
     // repeated keys count every time, like redis
     const count = args.slice(1).filter((arg) => ctx.store.has(arg.toString())).length;
     return integerReply(count);
+  },
+};
+
+const type: Command = {
+  arity: 2,
+  write: false,
+  run(args, ctx) {
+    return simpleString(ctx.store.get(args[1].toString())?.type ?? 'none');
   },
 };
 
@@ -98,12 +107,44 @@ const persist: Command = {
   },
 };
 
+const keys: Command = {
+  arity: 2,
+  write: false,
+  run(args, ctx) {
+    const pattern = globToRegExp(args[1].toString());
+    const matches = ctx.store.keys().filter((key) => pattern.test(key));
+    return arrayReply(matches.map((key) => bulkString(key)));
+  },
+};
+
+const dbsize: Command = {
+  arity: 1,
+  write: false,
+  run(_args, ctx) {
+    return integerReply(ctx.store.size);
+  },
+};
+
+const flushall: Command = {
+  // accepts the ASYNC / SYNC flag but always flushes right away
+  arity: -1,
+  write: true,
+  run(_args, ctx) {
+    ctx.store.flush();
+    return OK;
+  },
+};
+
 export const keyCommands: Record<string, Command> = {
   del,
   exists,
+  type,
   expire,
   pexpire,
   ttl,
   pttl,
   persist,
+  keys,
+  dbsize,
+  flushall,
 };
