@@ -31,6 +31,13 @@ describe('lazy expiry', () => {
     expect(run(ctx, 'GET', 'k')).toBe('$-1\r\n');
   });
 
+  it('TTL rounds to the nearest second like redis', () => {
+    run(ctx, 'SET', 'k', 'v', 'PX', '2600');
+    expect(run(ctx, 'TTL', 'k')).toBe(':3\r\n');
+    clock.advance(200);
+    expect(run(ctx, 'TTL', 'k')).toBe(':2\r\n');
+  });
+
   it('TTL is -1 for keys without expiry and -2 for missing keys', () => {
     run(ctx, 'SET', 'k', 'v');
     expect(run(ctx, 'TTL', 'k')).toBe(':-1\r\n');

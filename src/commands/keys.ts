@@ -84,7 +84,8 @@ const ttl: Command = {
     const special = remainingTtl(ctx, key);
     if (special !== null) return integerReply(special);
     const milliseconds = Math.max(0, ctx.store.expireAtOf(key)! - ctx.store.now());
-    return integerReply(Math.ceil(milliseconds / 1000));
+    // redis rounds to the nearest second
+    return integerReply(Math.floor((milliseconds + 500) / 1000));
   },
 };
 
