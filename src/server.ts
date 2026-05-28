@@ -16,11 +16,17 @@ export interface RunningServer {
   close(): Promise<void>;
 }
 
+// redis runs its background jobs 10 times a second (hz 10), so do we
+const ACTIVE_EXPIRE_INTERVAL_MS = 100;
+
 export async function startServer(options: ServerOptions): Promise<RunningServer> {
   const store = new Store(options.now);
   const ctx: CommandContext = {
     store,
   };
+
+  const sweepTimer = setInterval(() => store.activeExpireCycle(), ACTIVE_EXPIRE_INTERVAL_MS);
+  sweepTimer.unref();
 
   const sockets = new Set<net.Socket>();
   const server = net.createServer((socket) => {
@@ -40,6 +46,7 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
     port: address.port,
     store,
     async close() {
+      clearInterval(sweepTimer);
       for (const socket of sockets) socket.destroy();
       await new Promise<void>((resolve) => server.close(() => resolve()));
     },

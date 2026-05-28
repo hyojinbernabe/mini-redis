@@ -3,11 +3,17 @@ export type Value =
   | { type: 'list'; data: Buffer[] }
   | { type: 'hash'; data: Map<string, Buffer> };
 
+// how many keys with a TTL the active sweep checks per round, same as redis
+const SWEEP_SAMPLE_SIZE = 20;
+// keep sweeping while more than this share of the sample was expired
+const SWEEP_REPEAT_THRESHOLD = 0.25;
+
 export class Store {
   readonly now: () => number;
   private data = new Map<string, Value>();
-  // expiry times live in their own map, like redis does
+  // expiry times live in their own map (like redis) so the sweep only looks at keys that can expire
   private expires = new Map<string, number>();
+  private sweepCursor: Iterator<[string, number]> | null = null;
 
   constructor(now: () => number = Date.now) {
     this.now = now;
@@ -71,6 +77,7 @@ export class Store {
   flush(): void {
     this.data.clear();
     this.expires.clear();
+    this.sweepCursor = null;
   }
 
   // a key is gone once the clock passes its expiry time. at exactly expireAt it still exists (redis does the same)
@@ -79,5 +86,48 @@ export class Store {
     if (expireAt === undefined || this.now() <= expireAt) return false;
     this.delete(key);
     return true;
+  }
+
+  // active expiry. lazy expiry alone never frees keys nobody reads again,
+  // so every tick we check a sample of keys with a TTL and repeat while a lot of them were expired
+  activeExpireCycle(timeBudgetMs = 25): number {
+    const started = performance.now();
+    let removed = 0;
+
+    while (true) {
+      const { checked, expired } = this.sampleExpires(SWEEP_SAMPLE_SIZE);
+      removed += expired;
+      if (checked === 0 || expired / checked <= SWEEP_REPEAT_THRESHOLD) break;
+      if (performance.now() - started > timeBudgetMs) break;
+    }
+
+    return removed;
+  }
+
+  // picking random keys from a Map isn't cheap in JS, so instead we walk the
+  // expires map with a cursor that picks up where the last round stopped
+  private sampleExpires(sampleSize: number): { checked: number; expired: number } {
+    const limit = Math.min(sampleSize, this.expires.size);
+    const now = this.now();
+    let checked = 0;
+    let expired = 0;
+
+    while (checked < limit) {
+      let next = this.sweepCursor?.next();
+      if (!next || next.done) {
+        this.sweepCursor = this.expires.entries();
+        next = this.sweepCursor.next();
+        if (next.done) break;
+      }
+
+      const [key, expireAt] = next.value;
+      checked++;
+      if (now > expireAt) {
+        this.delete(key);
+        expired++;
+      }
+    }
+
+    return { checked, expired };
   }
 }
