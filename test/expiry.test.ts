@@ -114,3 +114,31 @@ describe('changing a TTL', () => {
     expect(run(ctx, 'GET', 'k')).toBe('$-1\r\n');
   });
 });
+
+describe('active expiry', () => {
+  it('removes expired keys nobody reads', () => {
+    for (let i = 0; i < 100; i++) run(ctx, 'SET', `temp:${i}`, 'v', 'PX', '10');
+    for (let i = 0; i < 10; i++) run(ctx, 'SET', `keep:${i}`, 'v', 'EX', '100');
+    run(ctx, 'SET', 'forever', 'v');
+
+    clock.advance(11);
+    // DBSIZE doesn't trigger lazy expiry, so the keys are still counted
+    expect(run(ctx, 'DBSIZE')).toBe(':111\r\n');
+
+    const removed = ctx.store.activeExpireCycle();
+    expect(removed).toBeGreaterThanOrEqual(90);
+
+    // a few more ticks clean up whatever is left
+    for (let i = 0; i < 10; i++) ctx.store.activeExpireCycle();
+    expect(run(ctx, 'DBSIZE')).toBe(':11\r\n');
+  });
+
+  it('stops after one round when few keys are expired', () => {
+    for (let i = 0; i < 100; i++) run(ctx, 'SET', `k:${i}`, 'v', 'EX', '100');
+    run(ctx, 'SET', 'short', 'v', 'PX', '1');
+    clock.advance(2);
+    // at most one sample of 20 gets checked, so the one expired key may or may not be hit
+    expect(ctx.store.activeExpireCycle()).toBeLessThanOrEqual(1);
+    expect(run(ctx, 'DBSIZE')).toMatch(/^:10[01]\r\n$/);
+  });
+});
