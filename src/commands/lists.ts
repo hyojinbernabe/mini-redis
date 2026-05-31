@@ -17,9 +17,14 @@ function push(ctx: CommandContext, args: Buffer[], toFront: boolean): Buffer {
 }
 
 function pop(ctx: CommandContext, args: Buffer[], fromFront: boolean): Buffer {
-  const list = getList(ctx, args[1].toString());
+  const key = args[1].toString();
+  const list = getList(ctx, key);
   if (!list) return NULL_BULK;
-  return bulkString(fromFront ? list.shift()! : list.pop()!);
+
+  const item = fromFront ? list.shift()! : list.pop()!;
+  // redis never keeps empty lists around
+  if (list.length === 0) ctx.store.delete(key);
+  return bulkString(item);
 }
 
 const lpush: Command = { arity: -3, write: true, run: (args, ctx) => push(ctx, args, true) };

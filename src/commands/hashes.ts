@@ -47,6 +47,7 @@ const hdel: Command = {
     for (const field of args.slice(2)) {
       if (hash.delete(field.toString())) removed++;
     }
+    if (hash.size === 0) ctx.store.delete(key);
     return integerReply(removed);
   },
 };

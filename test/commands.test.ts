@@ -162,6 +162,12 @@ describe('lists', () => {
     expect(run(ctx, 'LRANGE', 'l', '3', '1')).toBe('*0\r\n');
     expect(run(ctx, 'LRANGE', 'missing', '0', '-1')).toBe('*0\r\n');
   });
+
+  it('removes the key when the list becomes empty', () => {
+    run(ctx, 'RPUSH', 'l', 'only');
+    run(ctx, 'LPOP', 'l');
+    expect(run(ctx, 'EXISTS', 'l')).toBe(':0\r\n');
+  });
 });
 
 describe('hashes', () => {
@@ -174,5 +180,12 @@ describe('hashes', () => {
       '*6\r\n$4\r\nname\r\n$6\r\nhyojin\r\n$4\r\ncity\r\n$6\r\nmanila\r\n$3\r\njob\r\n$3\r\ndev\r\n',
     );
     expect(run(ctx, 'HGETALL', 'nobody')).toBe('*0\r\n');
+  });
+
+  it('HDEL removes fields and the key once empty', () => {
+    run(ctx, 'HSET', 'h', 'a', '1', 'b', '2');
+    expect(run(ctx, 'HDEL', 'h', 'a', 'zzz')).toBe(':1\r\n');
+    expect(run(ctx, 'HDEL', 'h', 'b')).toBe(':1\r\n');
+    expect(run(ctx, 'EXISTS', 'h')).toBe(':0\r\n');
   });
 });
