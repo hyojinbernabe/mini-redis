@@ -21,6 +21,19 @@ describe('errors', () => {
     expect(run(ctx, 'MSET', 'a', '1', 'b')).toBe(
       "-ERR wrong number of arguments for 'mset' command\r\n",
     );
+    expect(run(ctx, 'HSET', 'h', 'f', 'v', 'f2')).toBe(
+      "-ERR wrong number of arguments for 'hset' command\r\n",
+    );
+  });
+
+  it('returns WRONGTYPE when the key holds another type', () => {
+    run(ctx, 'LPUSH', 'list', 'a');
+    run(ctx, 'SET', 'str', 'a');
+    const wrongType = '-WRONGTYPE Operation against a key holding the wrong kind of value\r\n';
+    expect(run(ctx, 'GET', 'list')).toBe(wrongType);
+    expect(run(ctx, 'INCR', 'list')).toBe(wrongType);
+    expect(run(ctx, 'LPUSH', 'str', 'b')).toBe(wrongType);
+    expect(run(ctx, 'HGET', 'str', 'f')).toBe(wrongType);
   });
 
   it('command names are case insensitive', () => {
@@ -115,5 +128,51 @@ describe('keys', () => {
     expect(keys('user:[!1]')).toEqual(['user:2']);
     expect(keys('h\\?llo')).toEqual(['h?llo']);
     expect(keys('*')).toHaveLength(4);
+  });
+
+  it('DBSIZE, TYPE and FLUSHALL', () => {
+    run(ctx, 'SET', 's', '1');
+    run(ctx, 'RPUSH', 'l', '1');
+    run(ctx, 'HSET', 'h', 'f', '1');
+    expect(run(ctx, 'DBSIZE')).toBe(':3\r\n');
+    expect(run(ctx, 'TYPE', 's')).toBe('+string\r\n');
+    expect(run(ctx, 'TYPE', 'l')).toBe('+list\r\n');
+    expect(run(ctx, 'TYPE', 'h')).toBe('+hash\r\n');
+    expect(run(ctx, 'TYPE', 'nope')).toBe('+none\r\n');
+    expect(run(ctx, 'FLUSHALL')).toBe('+OK\r\n');
+    expect(run(ctx, 'DBSIZE')).toBe(':0\r\n');
+  });
+});
+
+describe('lists', () => {
+  it('LPUSH and RPUSH keep redis ordering', () => {
+    expect(run(ctx, 'RPUSH', 'l', 'b', 'c')).toBe(':2\r\n');
+    expect(run(ctx, 'LPUSH', 'l', 'a', 'z')).toBe(':4\r\n');
+    expect(run(ctx, 'LRANGE', 'l', '0', '-1')).toBe(
+      '*4\r\n$1\r\nz\r\n$1\r\na\r\n$1\r\nb\r\n$1\r\nc\r\n',
+    );
+    expect(run(ctx, 'LLEN', 'l')).toBe(':4\r\n');
+  });
+
+  it('LRANGE handles negative and out of range indexes', () => {
+    run(ctx, 'RPUSH', 'l', 'a', 'b', 'c', 'd');
+    expect(run(ctx, 'LRANGE', 'l', '-2', '-1')).toBe('*2\r\n$1\r\nc\r\n$1\r\nd\r\n');
+    expect(run(ctx, 'LRANGE', 'l', '2', '100')).toBe('*2\r\n$1\r\nc\r\n$1\r\nd\r\n');
+    expect(run(ctx, 'LRANGE', 'l', '-100', '0')).toBe('*1\r\n$1\r\na\r\n');
+    expect(run(ctx, 'LRANGE', 'l', '3', '1')).toBe('*0\r\n');
+    expect(run(ctx, 'LRANGE', 'missing', '0', '-1')).toBe('*0\r\n');
+  });
+});
+
+describe('hashes', () => {
+  it('HSET, HGET, HGETALL', () => {
+    expect(run(ctx, 'HSET', 'user', 'name', 'hyojin', 'city', 'baguio')).toBe(':2\r\n');
+    expect(run(ctx, 'HSET', 'user', 'city', 'manila', 'job', 'dev')).toBe(':1\r\n');
+    expect(run(ctx, 'HGET', 'user', 'city')).toBe('$6\r\nmanila\r\n');
+    expect(run(ctx, 'HGET', 'user', 'age')).toBe('$-1\r\n');
+    expect(run(ctx, 'HGETALL', 'user')).toBe(
+      '*6\r\n$4\r\nname\r\n$6\r\nhyojin\r\n$4\r\ncity\r\n$6\r\nmanila\r\n$3\r\njob\r\n$3\r\ndev\r\n',
+    );
+    expect(run(ctx, 'HGETALL', 'nobody')).toBe('*0\r\n');
   });
 });

@@ -50,6 +50,15 @@ describe('lazy expiry', () => {
     expect(run(ctx, 'DEL', 'k')).toBe(':0\r\n');
     expect(run(ctx, 'KEYS', '*')).toBe('*0\r\n');
   });
+
+  it('an expired key starts fresh for INCR and LPUSH', () => {
+    run(ctx, 'SET', 'n', '41', 'PX', '5');
+    run(ctx, 'RPUSH', 'l', 'old');
+    run(ctx, 'PEXPIRE', 'l', '5');
+    clock.advance(6);
+    expect(run(ctx, 'INCR', 'n')).toBe(':1\r\n');
+    expect(run(ctx, 'LPUSH', 'l', 'new')).toBe(':1\r\n');
+  });
 });
 
 describe('changing a TTL', () => {
