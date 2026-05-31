@@ -48,3 +48,10 @@ export function getString(ctx: CommandContext, key: string): Buffer | null {
   if (value.type !== 'string') throw new CommandError(WRONGTYPE);
   return value.data;
 }
+
+export function getList(ctx: CommandContext, key: string): Buffer[] | null {
+  const value = ctx.store.get(key);
+  if (!value) return null;
+  if (value.type !== 'list') throw new CommandError(WRONGTYPE);
+  return value.data;
+}
