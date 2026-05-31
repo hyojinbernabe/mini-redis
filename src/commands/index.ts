@@ -1,4 +1,5 @@
 import { errorReply } from '../resp.ts';
+import { hashCommands } from './hashes.ts';
 import { keyCommands } from './keys.ts';
 import { listCommands } from './lists.ts';
 import { serverCommands } from './server.ts';
@@ -13,6 +14,7 @@ const commands = new Map<string, Command>(
     ...stringCommands,
     ...keyCommands,
     ...listCommands,
+    ...hashCommands,
   }),
 );
 

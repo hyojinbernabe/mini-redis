@@ -55,3 +55,10 @@ export function getList(ctx: CommandContext, key: string): Buffer[] | null {
   if (value.type !== 'list') throw new CommandError(WRONGTYPE);
   return value.data;
 }
+
+export function getHash(ctx: CommandContext, key: string): Map<string, Buffer> | null {
+  const value = ctx.store.get(key);
+  if (!value) return null;
+  if (value.type !== 'hash') throw new CommandError(WRONGTYPE);
+  return value.data;
+}
