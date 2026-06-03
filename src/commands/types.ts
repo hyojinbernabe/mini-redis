@@ -12,6 +12,9 @@ export interface Command {
   arity: number;
   write: boolean;
   run(args: Buffer[], ctx: CommandContext): Buffer;
+  // what to write to the AOF instead of the original command. used when replaying
+  // the command later would give a different result (relative TTLs)
+  toAof?(args: Buffer[], ctx: CommandContext): Array<Array<Buffer | string>>;
 }
 
 export class CommandError extends Error {}

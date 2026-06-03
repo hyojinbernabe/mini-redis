@@ -18,7 +18,7 @@ interface SetOptions {
   onlyIfExists: boolean;
 }
 
-// SET key value [NX | XX] [EX seconds | PX milliseconds | KEEPTTL]
+// SET key value [NX | XX] [EX seconds | PX milliseconds | PXAT unix-ms | KEEPTTL]
 function parseSetOptions(args: Buffer[], now: number): SetOptions {
   const options: SetOptions = {
     expireAt: null,
@@ -38,13 +38,14 @@ function parseSetOptions(args: Buffer[], now: number): SetOptions {
     } else if (option === 'KEEPTTL' && !hasExpiry) {
       options.keepTtl = true;
       hasExpiry = true;
-    } else if ((option === 'EX' || option === 'PX') && !hasExpiry) {
+    } else if ((option === 'EX' || option === 'PX' || option === 'PXAT') && !hasExpiry) {
       if (i + 1 >= args.length) throw new CommandError(SYNTAX_ERROR);
       const amount = parseInteger(args[++i]);
       if (amount <= 0) throw new CommandError("ERR invalid expire time in 'set' command");
 
       if (option === 'EX') options.expireAt = now + amount * 1000;
-      else options.expireAt = now + amount;
+      else if (option === 'PX') options.expireAt = now + amount;
+      else options.expireAt = amount;
       hasExpiry = true;
     } else {
       throw new CommandError(SYNTAX_ERROR);
@@ -68,6 +69,20 @@ const set: Command = {
     if (options.keepTtl) ctx.store.put(key, { type: 'string', data: args[2] });
     else ctx.store.set(key, { type: 'string', data: args[2] }, options.expireAt);
     return OK;
+  },
+  // EX/PX are relative to "now", which is a different time when the AOF gets replayed.
+  // so we log the absolute expiry instead
+  toAof(args, ctx) {
+    const key = args[1].toString();
+    const command: Array<Buffer | string> = ['SET', args[1], args[2]];
+    for (const arg of args.slice(3)) {
+      const option = arg.toString().toUpperCase();
+      if (option === 'NX' || option === 'XX') command.push(option);
+    }
+
+    const expireAt = ctx.store.expireAtOf(key);
+    if (expireAt !== undefined) command.push('PXAT', String(expireAt));
+    return [command];
   },
 };
 

@@ -50,6 +50,13 @@ function parseExpireTime(arg: Buffer, multiplier: number, commandName: string): 
   return value;
 }
 
+// relative TTLs go into the AOF as an absolute time, see SET in strings.ts
+function expireToAof(args: Buffer[], ctx: CommandContext): Array<Array<Buffer | string>> {
+  const when = ctx.store.expireAtOf(args[1].toString());
+  if (when === undefined) return [['DEL', args[1]]];
+  return [['PEXPIREAT', args[1], String(when)]];
+}
+
 const expire: Command = {
   arity: 3,
   write: true,
@@ -57,6 +64,7 @@ const expire: Command = {
     const seconds = parseExpireTime(args[2], 1000, 'expire');
     return expireAt(ctx, args[1].toString(), ctx.store.now() + seconds);
   },
+  toAof: expireToAof,
 };
 
 const pexpire: Command = {
@@ -65,6 +73,15 @@ const pexpire: Command = {
   run(args, ctx) {
     const milliseconds = parseExpireTime(args[2], 1, 'pexpire');
     return expireAt(ctx, args[1].toString(), ctx.store.now() + milliseconds);
+  },
+  toAof: expireToAof,
+};
+
+const pexpireat: Command = {
+  arity: 3,
+  write: true,
+  run(args, ctx) {
+    return expireAt(ctx, args[1].toString(), parseExpireTime(args[2], 1, 'pexpireat'));
   },
 };
 
@@ -142,6 +159,7 @@ export const keyCommands: Record<string, Command> = {
   type,
   expire,
   pexpire,
+  pexpireat,
   ttl,
   pttl,
   persist,

@@ -39,7 +39,7 @@ export function execute(args: Buffer[], ctx: CommandContext): Buffer {
   try {
     const reply = command.run(args, ctx);
     if (command.write && ctx.aof) {
-      ctx.aof.append([args]);
+      ctx.aof.append(command.toAof ? command.toAof(args, ctx) : [args]);
     }
     return reply;
   } catch (error) {
