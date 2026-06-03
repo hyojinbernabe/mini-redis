@@ -1,7 +1,9 @@
+import type { AppendOnlyFile } from '../aof.ts';
 import type { Store } from '../store.ts';
 
 export interface CommandContext {
   store: Store;
+  aof: AppendOnlyFile | null;
 }
 
 export interface Command {

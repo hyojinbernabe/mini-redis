@@ -37,7 +37,11 @@ export function execute(args: Buffer[], ctx: CommandContext): Buffer {
   if (!arityOk) return errorReply(`ERR wrong number of arguments for '${name}' command`);
 
   try {
-    return command.run(args, ctx);
+    const reply = command.run(args, ctx);
+    if (command.write && ctx.aof) {
+      ctx.aof.append([args]);
+    }
+    return reply;
   } catch (error) {
     if (error instanceof CommandError) return errorReply(error.message);
     throw error;

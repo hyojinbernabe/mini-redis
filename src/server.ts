@@ -1,4 +1,5 @@
 import net from 'node:net';
+import { AppendOnlyFile, type FsyncPolicy, loadAof } from './aof.ts';
 import { type CommandContext, execute } from './commands/index.ts';
 import { ProtocolError, RespParser, errorReply } from './resp.ts';
 import { Store } from './store.ts';
@@ -6,6 +7,9 @@ import { Store } from './store.ts';
 export interface ServerOptions {
   port: number;
   host: string;
+  appendOnly: boolean;
+  appendFilename: string;
+  appendFsync: FsyncPolicy;
   // for tests, lets them control time
   now?: () => number;
 }
@@ -13,6 +17,7 @@ export interface ServerOptions {
 export interface RunningServer {
   port: number;
   store: Store;
+  loadedCommands: number;
   close(): Promise<void>;
 }
 
@@ -23,7 +28,14 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
   const store = new Store(options.now);
   const ctx: CommandContext = {
     store,
+    aof: null,
   };
+
+  let loadedCommands = 0;
+  if (options.appendOnly) {
+    loadedCommands = loadAof(options.appendFilename, ctx);
+    ctx.aof = new AppendOnlyFile(options.appendFilename, options.appendFsync);
+  }
 
   const sweepTimer = setInterval(() => store.activeExpireCycle(), ACTIVE_EXPIRE_INTERVAL_MS);
   sweepTimer.unref();
@@ -45,10 +57,12 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
   return {
     port: address.port,
     store,
+    loadedCommands,
     async close() {
       clearInterval(sweepTimer);
       for (const socket of sockets) socket.destroy();
       await new Promise<void>((resolve) => server.close(() => resolve()));
+      ctx.aof?.close();
     },
   };
 }
@@ -69,6 +83,7 @@ function handleConnection(socket: net.Socket, ctx: CommandContext): void {
 
     // one data event can hold many pipelined commands. answer them all with one write
     const replies = commands.map((args) => execute(args, ctx));
+    ctx.aof?.flush();
     if (replies.length > 0) socket.write(replies.length === 1 ? replies[0] : Buffer.concat(replies));
   });
 
