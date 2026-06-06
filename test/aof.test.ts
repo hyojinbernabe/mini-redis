@@ -106,4 +106,20 @@ describe('append only file', () => {
     clock.advance(5000);
     expect(run(restart(), 'GET', 'k')).toBe('$1\r\nv\r\n');
   });
+
+  it('loads what it can from a file cut off mid command and truncates the rest', () => {
+    const ctx = withAof();
+    runAndFlush(ctx, 'SET', 'a', '1');
+    runAndFlush(ctx, 'SET', 'b', '2');
+    ctx.aof!.close();
+
+    const fullSize = fs.statSync(aofPath).size;
+    fs.appendFileSync(aofPath, '*3\r\n$3\r\nSET\r\n$1\r\nc');
+
+    const restored = createContext(clock);
+    expect(loadAof(aofPath, restored)).toBe(2);
+    expect(run(restored, 'GET', 'b')).toBe('$1\r\n2\r\n');
+    expect(run(restored, 'EXISTS', 'c')).toBe(':0\r\n');
+    expect(fs.statSync(aofPath).size).toBe(fullSize);
+  });
 });

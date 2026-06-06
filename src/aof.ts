@@ -76,5 +76,12 @@ export function loadAof(path: string, ctx: CommandContext): number {
     ctx.store.loading = false;
   }
 
+  // the server probably died in the middle of a write. keep what we have and
+  // cut the broken tail off so new commands don't get appended after garbage
+  if (parser.pendingBytes > 0) {
+    console.warn(`aof: ignoring ${parser.pendingBytes} bytes of incomplete data at the end`);
+    fs.truncateSync(path, data.length - parser.pendingBytes);
+  }
+
   return commands.length;
 }
