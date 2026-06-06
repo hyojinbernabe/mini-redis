@@ -10,6 +10,9 @@ const SWEEP_REPEAT_THRESHOLD = 0.25;
 
 export class Store {
   readonly now: () => number;
+  // true while the AOF is replaying. keys must not expire halfway through a replay,
+  // or a later PERSIST in the log would find nothing to persist
+  loading = false;
   private data = new Map<string, Value>();
   // expiry times live in their own map (like redis) so the sweep only looks at keys that can expire
   private expires = new Map<string, number>();
@@ -83,7 +86,7 @@ export class Store {
   // a key is gone once the clock passes its expiry time. at exactly expireAt it still exists (redis does the same)
   private expireIfNeeded(key: string): boolean {
     const expireAt = this.expires.get(key);
-    if (expireAt === undefined || this.now() <= expireAt) return false;
+    if (this.loading || expireAt === undefined || this.now() <= expireAt) return false;
     this.delete(key);
     return true;
   }

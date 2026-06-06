@@ -64,11 +64,16 @@ export function loadAof(path: string, ctx: CommandContext): number {
   const commands = parser.feed(data);
   const replayCtx: CommandContext = { ...ctx, aof: null };
 
-  for (const args of commands) {
-    const reply = execute(args, replayCtx);
-    if (reply[0] === 0x2d) {
-      console.warn(`aof: "${args[0]}" failed during replay: ${reply.toString().trim()}`);
+  ctx.store.loading = true;
+  try {
+    for (const args of commands) {
+      const reply = execute(args, replayCtx);
+      if (reply[0] === 0x2d) {
+        console.warn(`aof: "${args[0]}" failed during replay: ${reply.toString().trim()}`);
+      }
     }
+  } finally {
+    ctx.store.loading = false;
   }
 
   return commands.length;

@@ -96,4 +96,14 @@ describe('append only file', () => {
     expect(run(restored, 'EXISTS', 'short')).toBe(':0\r\n');
     expect(run(restored, 'EXISTS', 'long')).toBe(':1\r\n');
   });
+
+  it('replays PERSIST so the key survives', () => {
+    const ctx = withAof();
+    runAndFlush(ctx, 'SET', 'k', 'v', 'EX', '1');
+    runAndFlush(ctx, 'PERSIST', 'k');
+    ctx.aof!.close();
+
+    clock.advance(5000);
+    expect(run(restart(), 'GET', 'k')).toBe('$1\r\nv\r\n');
+  });
 });

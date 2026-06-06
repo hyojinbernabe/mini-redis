@@ -37,7 +37,7 @@ const type: Command = {
 function expireAt(ctx: CommandContext, key: string, when: number): Buffer {
   if (!ctx.store.has(key)) return integerReply(0);
   // a time in the past just deletes the key
-  if (when <= ctx.store.now()) ctx.store.delete(key);
+  if (when <= ctx.store.now() && !ctx.store.loading) ctx.store.delete(key);
   else ctx.store.setExpireAt(key, when);
   return integerReply(1);
 }
