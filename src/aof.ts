@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import { execute, type CommandContext } from './commands/index.ts';
 import { RespParser, encodeCommand } from './resp.ts';
+import type { Store, Value } from './store.ts';
 
 export type FsyncPolicy = 'always' | 'everysec' | 'no';
 
@@ -41,6 +42,30 @@ export class AppendOnlyFile {
     // "no" leaves it to the OS
   }
 
+  // writes the smallest set of commands that rebuilds the current data into a
+  // temp file, then swaps it in. a key that was SET 1000 times becomes one SET
+  rewrite(store: Store): void {
+    this.flush();
+    const tempPath = `${this.path}.rewrite`;
+    const tempFd = fs.openSync(tempPath, 'w');
+
+    try {
+      for (const [key, value, expireAt] of store.entries()) {
+        const commands = commandsFor(key, value);
+        if (expireAt !== undefined) commands.push(['PEXPIREAT', key, String(expireAt)]);
+        fs.writeSync(tempFd, Buffer.concat(commands.map(encodeCommand)));
+      }
+      fs.fsyncSync(tempFd);
+    } finally {
+      fs.closeSync(tempFd);
+    }
+
+    fs.closeSync(this.fd);
+    fs.renameSync(tempPath, this.path);
+    this.fd = fs.openSync(this.path, 'a');
+    this.unsynced = false;
+  }
+
   close(): void {
     if (this.timer) clearInterval(this.timer);
     this.flush();
@@ -52,6 +77,17 @@ export class AppendOnlyFile {
     if (!this.unsynced) return;
     fs.fsyncSync(this.fd);
     this.unsynced = false;
+  }
+}
+
+function commandsFor(key: string, value: Value): Array<Array<Buffer | string>> {
+  switch (value.type) {
+    case 'string':
+      return [['SET', key, value.data]];
+    case 'list':
+      return [['RPUSH', key, ...value.data]];
+    case 'hash':
+      return [['HSET', key, ...[...value.data].flat()]];
   }
 }
 

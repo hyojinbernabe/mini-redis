@@ -122,4 +122,37 @@ describe('append only file', () => {
     expect(run(restored, 'EXISTS', 'c')).toBe(':0\r\n');
     expect(fs.statSync(aofPath).size).toBe(fullSize);
   });
+
+  it('BGREWRITEAOF compacts the file to the current data', () => {
+    const ctx = withAof();
+    for (let i = 0; i < 100; i++) runAndFlush(ctx, 'INCR', 'counter');
+    runAndFlush(ctx, 'RPUSH', 'list', 'a', 'b', 'c');
+    runAndFlush(ctx, 'LPOP', 'list');
+    runAndFlush(ctx, 'HSET', 'h', 'f1', 'v1', 'f2', 'v2');
+    runAndFlush(ctx, 'SET', 'temp', 'x', 'EX', '100');
+    runAndFlush(ctx, 'SET', 'deleted', 'x');
+    runAndFlush(ctx, 'DEL', 'deleted');
+    const sizeBefore = fs.statSync(aofPath).size;
+
+    expect(runAndFlush(ctx, 'BGREWRITEAOF')).toBe('+Append only file rewritten\r\n');
+    expect(fs.statSync(aofPath).size).toBeLessThan(sizeBefore);
+
+    // the file still works for appends after the rewrite
+    runAndFlush(ctx, 'SET', 'after', 'rewrite');
+    ctx.aof!.close();
+
+    const restored = restart();
+    expect(run(restored, 'GET', 'counter')).toBe('$3\r\n100\r\n');
+    expect(run(restored, 'LRANGE', 'list', '0', '-1')).toBe('*2\r\n$1\r\nb\r\n$1\r\nc\r\n');
+    expect(run(restored, 'HGETALL', 'h')).toBe(
+      '*4\r\n$2\r\nf1\r\n$2\r\nv1\r\n$2\r\nf2\r\n$2\r\nv2\r\n',
+    );
+    expect(run(restored, 'TTL', 'temp')).toBe(':100\r\n');
+    expect(run(restored, 'EXISTS', 'deleted')).toBe(':0\r\n');
+    expect(run(restored, 'GET', 'after')).toBe('$7\r\nrewrite\r\n');
+  });
+
+  it('BGREWRITEAOF errors when the AOF is off', () => {
+    expect(run(createContext(clock), 'BGREWRITEAOF')).toBe('-ERR append only file is turned off\r\n');
+  });
 });

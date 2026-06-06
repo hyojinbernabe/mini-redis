@@ -83,6 +83,13 @@ export class Store {
     this.sweepCursor = null;
   }
 
+  *entries(): Generator<[string, Value, number | undefined]> {
+    for (const key of [...this.data.keys()]) {
+      if (this.expireIfNeeded(key)) continue;
+      yield [key, this.data.get(key)!, this.expires.get(key)];
+    }
+  }
+
   // a key is gone once the clock passes its expiry time. at exactly expireAt it still exists (redis does the same)
   private expireIfNeeded(key: string): boolean {
     const expireAt = this.expires.get(key);
