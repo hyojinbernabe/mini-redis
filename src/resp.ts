@@ -82,7 +82,8 @@ function parseArray(buffer: Buffer, start: number): ParseResult {
       throw new ProtocolError('bulk string not terminated by CRLF');
     }
 
-    args.push(buffer.subarray(lengthLine.next, end));
+    // copy so a stored value doesn't keep the whole socket chunk alive
+    args.push(Buffer.from(buffer.subarray(lengthLine.next, end)));
     offset = end + 2;
   }
 
