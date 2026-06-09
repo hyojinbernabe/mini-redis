@@ -29,6 +29,11 @@ export async function startServer(options: ServerOptions): Promise<RunningServer
   const ctx: CommandContext = {
     store,
     aof: null,
+    config: {
+      appendonly: options.appendOnly ? 'yes' : 'no',
+      appendfsync: options.appendFsync,
+      save: '',
+    },
   };
 
   let loadedCommands = 0;

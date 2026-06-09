@@ -4,6 +4,7 @@ import type { Store } from '../store.ts';
 export interface CommandContext {
   store: Store;
   aof: AppendOnlyFile | null;
+  config: Record<string, string>;
 }
 
 export interface Command {

@@ -189,3 +189,21 @@ describe('hashes', () => {
     expect(run(ctx, 'EXISTS', 'h')).toBe(':0\r\n');
   });
 });
+
+describe('server', () => {
+  it('PING, ECHO, SELECT', () => {
+    expect(run(ctx, 'PING')).toBe('+PONG\r\n');
+    expect(run(ctx, 'ECHO', 'hello')).toBe('$5\r\nhello\r\n');
+    expect(run(ctx, 'SELECT', '0')).toBe('+OK\r\n');
+    expect(run(ctx, 'SELECT', '1')).toBe('-ERR DB index is out of range\r\n');
+  });
+
+  it('CONFIG GET returns matching settings', () => {
+    ctx.config = { appendonly: 'yes', appendfsync: 'everysec', save: '' };
+    expect(run(ctx, 'CONFIG', 'GET', 'appendonly')).toBe(
+      '*2\r\n$10\r\nappendonly\r\n$3\r\nyes\r\n',
+    );
+    expect(run(ctx, 'CONFIG', 'GET', 'append*')).toMatch(/^\*4\r\n/);
+    expect(run(ctx, 'CONFIG', 'GET', 'maxmemory')).toBe('*0\r\n');
+  });
+});

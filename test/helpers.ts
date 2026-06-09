@@ -11,7 +11,7 @@ export class FakeClock {
 }
 
 export function createContext(clock = new FakeClock()): CommandContext {
-  return { store: new Store(clock.now), aof: null };
+  return { store: new Store(clock.now), aof: null, config: {} };
 }
 
 // runs a command and returns the raw RESP reply as a string
