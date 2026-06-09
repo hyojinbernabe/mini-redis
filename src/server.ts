@@ -1,7 +1,7 @@
 import net from 'node:net';
 import { AppendOnlyFile, type FsyncPolicy, loadAof } from './aof.ts';
 import { type CommandContext, execute } from './commands/index.ts';
-import { ProtocolError, RespParser, errorReply } from './resp.ts';
+import { OK, ProtocolError, RespParser, errorReply } from './resp.ts';
 import { Store } from './store.ts';
 
 export interface ServerOptions {
@@ -82,9 +82,20 @@ function handleConnection(socket: net.Socket, ctx: CommandContext): void {
     }
 
     // one data event can hold many pipelined commands. answer them all with one write
-    const replies = commands.map((args) => execute(args, ctx));
+    const replies: Buffer[] = [];
+    let quit = false;
+    for (const args of commands) {
+      if (args[0].toString().toLowerCase() === 'quit') {
+        replies.push(OK);
+        quit = true;
+        break;
+      }
+      replies.push(execute(args, ctx));
+    }
+
     ctx.aof?.flush();
     if (replies.length > 0) socket.write(replies.length === 1 ? replies[0] : Buffer.concat(replies));
+    if (quit) socket.end();
   });
 
   // a client disconnecting mid-write shouldn't crash the server

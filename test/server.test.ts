@@ -104,4 +104,14 @@ describe('tcp server', () => {
     await closed;
     socket.destroy();
   });
+
+  it('QUIT says OK and closes the connection', async () => {
+    const socket = await connect();
+    const closed = new Promise((resolve) => socket.on('end', resolve));
+    const reply = readBytes(socket, 5);
+    socket.write('*1\r\n$4\r\nQUIT\r\n');
+    expect(await reply).toBe('+OK\r\n');
+    await closed;
+    socket.destroy();
+  });
 });
