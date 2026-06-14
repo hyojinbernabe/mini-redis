@@ -5,6 +5,9 @@
 
 const STAR = 0x2a; // '*'
 const DOLLAR = 0x24; // '$'
+const MINUS = 0x2d; // '-'
+const CR = 0x0d;
+const LF = 0x0a;
 
 const MAX_ARGS = 1024 * 1024;
 const MAX_BULK_LENGTH = 512 * 1024 * 1024;
@@ -19,17 +22,23 @@ export class RespParser {
 
   // returns every complete command received so far and keeps any partial one
   feed(chunk: Buffer): Buffer[][] {
-    this.buffer = Buffer.concat([this.buffer, chunk]);
+    this.buffer = this.buffer.length === 0 ? chunk : Buffer.concat([this.buffer, chunk]);
     const commands: Buffer[][] = [];
+    let offset = 0;
 
-    while (this.buffer.length > 0) {
+    // walk the buffer with an offset and only cut it once at the end,
+    // instead of slicing after every command
+    while (offset < this.buffer.length) {
       const result =
-        this.buffer[0] === STAR ? parseArray(this.buffer, 0) : parseInline(this.buffer, 0);
+        this.buffer[offset] === STAR
+          ? parseArray(this.buffer, offset)
+          : parseInline(this.buffer, offset);
       if (!result) break;
       if (result.args.length > 0) commands.push(result.args);
-      this.buffer = this.buffer.subarray(result.next);
+      offset = result.next;
     }
 
+    this.buffer = this.buffer.subarray(offset);
     return commands;
   }
 
@@ -38,26 +47,36 @@ export class RespParser {
   }
 }
 
-function readLine(buffer: Buffer, start: number): { line: string; next: number } | null {
-  const text = buffer.toString('latin1', start);
-  const index = text.indexOf('\r\n');
-  if (index === -1) {
-    if (text.length > MAX_INLINE_LENGTH) throw new ProtocolError('too big header');
+// reads the number on a header line like "*3\r\n" or "$11\r\n" straight from the bytes.
+// returns null if the line isn't complete yet
+function readLength(buffer: Buffer, start: number): { value: number; next: number } | null {
+  const lineEnd = buffer.indexOf(CR, start);
+  if (lineEnd === -1 || lineEnd + 1 >= buffer.length) {
+    if (buffer.length - start > MAX_INLINE_LENGTH) throw new ProtocolError('too big header');
     return null;
   }
-  return { line: text.slice(0, index), next: start + index + 2 };
-}
+  if (buffer[lineEnd + 1] !== LF) throw new ProtocolError('expected CRLF after length');
 
-function parseLength(line: string): number {
-  if (!/^-?\d+$/.test(line)) throw new ProtocolError('invalid length');
-  return parseInt(line, 10);
+  let index = start;
+  const negative = buffer[index] === MINUS;
+  if (negative) index++;
+  if (index === lineEnd) throw new ProtocolError('invalid length');
+
+  let value = 0;
+  for (; index < lineEnd; index++) {
+    const digit = buffer[index] - 0x30;
+    if (digit < 0 || digit > 9) throw new ProtocolError('invalid length');
+    value = value * 10 + digit;
+  }
+
+  return { value: negative ? -value : value, next: lineEnd + 2 };
 }
 
 function parseArray(buffer: Buffer, start: number): ParseResult {
-  const header = readLine(buffer, start + 1);
+  const header = readLength(buffer, start + 1);
   if (!header) return null;
 
-  const count = parseLength(header.line);
+  const count = header.value;
   if (count > MAX_ARGS) throw new ProtocolError('invalid multibulk length');
   if (count <= 0) return { args: [], next: header.next };
 
@@ -70,20 +89,20 @@ function parseArray(buffer: Buffer, start: number): ParseResult {
       throw new ProtocolError(`expected '$', got '${String.fromCharCode(buffer[offset])}'`);
     }
 
-    const lengthLine = readLine(buffer, offset + 1);
-    if (!lengthLine) return null;
+    const length = readLength(buffer, offset + 1);
+    if (!length) return null;
+    if (length.value < 0 || length.value > MAX_BULK_LENGTH) {
+      throw new ProtocolError('invalid bulk length');
+    }
 
-    const length = parseLength(lengthLine.line);
-    if (length < 0 || length > MAX_BULK_LENGTH) throw new ProtocolError('invalid bulk length');
-
-    const end = lengthLine.next + length;
+    const end = length.next + length.value;
     if (end + 2 > buffer.length) return null;
-    if (buffer[end] !== 0x0d || buffer[end + 1] !== 0x0a) {
+    if (buffer[end] !== CR || buffer[end + 1] !== LF) {
       throw new ProtocolError('bulk string not terminated by CRLF');
     }
 
     // copy so a stored value doesn't keep the whole socket chunk alive
-    args.push(Buffer.from(buffer.subarray(lengthLine.next, end)));
+    args.push(Buffer.from(buffer.subarray(length.next, end)));
     offset = end + 2;
   }
 
@@ -91,7 +110,7 @@ function parseArray(buffer: Buffer, start: number): ParseResult {
 }
 
 function parseInline(buffer: Buffer, start: number): ParseResult {
-  const newline = buffer.indexOf(0x0a, start);
+  const newline = buffer.indexOf(LF, start);
   if (newline === -1) {
     if (buffer.length - start > MAX_INLINE_LENGTH) throw new ProtocolError('too big inline request');
     return null;
