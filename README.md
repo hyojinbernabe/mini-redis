@@ -67,10 +67,15 @@ Keys expire two ways, also copied from Redis. Every read checks whether the key 
 
 Persistance lives in `src/aof.ts`. Every write command is appended to `appendonly.aof` in RESP format, and the file gets replayed on startup. Commands with relative times (`SET ... EX 60`, `EXPIRE`) are logged with an absolute timestamp instead, otherwise every restart would reset the TTLs. `appendfsync` decides how often the file is flushed to disk: after every write, once a second, or whenever the OS gets to it. `BGREWRITEAOF` shrinks the file down to one command per key.
 
+## Benchmarks
+
+I compared it against real Redis 8.0.5 with `redis-benchmark`, then profiled the parser and fixed the slowest part. Numbers and exact commands are in [BENCHMARKS.md](BENCHMARKS.md).
+
 ## What I learned
 
 - A command can arrive in pieces over TCP, so the parser has to hold on to leftover bytes. Testing a command split at every possible byte was the easiest way to trust it.
 - Replaying a log is harder than writing it. Times have to be absolute, and keys can't expire in the middle of a replay (a `PERSIST` later in the file would find nothing to persist).
+- Converting buffers to strings to find `\r\n` is easy to write and slow in a way you don't notice until you measure it. Working on the bytes directly made the parser a lot faster on big pipelines.
 
 ## What I'd do next
 
