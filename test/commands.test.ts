@@ -166,6 +166,16 @@ describe('lists', () => {
     expect(run(ctx, 'LRANGE', 'missing', '0', '-1')).toBe('*0\r\n');
   });
 
+  it('LPOP and RPOP, with and without a count', () => {
+    run(ctx, 'RPUSH', 'l', 'a', 'b', 'c', 'd');
+    expect(run(ctx, 'LPOP', 'l')).toBe('$1\r\na\r\n');
+    expect(run(ctx, 'RPOP', 'l')).toBe('$1\r\nd\r\n');
+    expect(run(ctx, 'RPOP', 'l', '0')).toBe('*0\r\n');
+    expect(run(ctx, 'RPOP', 'l', '5')).toBe('*2\r\n$1\r\nc\r\n$1\r\nb\r\n');
+    expect(run(ctx, 'LPOP', 'l')).toBe('$-1\r\n');
+    expect(run(ctx, 'LPOP', 'l', '2')).toBe('*-1\r\n');
+  });
+
   it('removes the key when the list becomes empty', () => {
     run(ctx, 'RPUSH', 'l', 'only');
     run(ctx, 'LPOP', 'l');

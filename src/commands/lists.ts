@@ -1,5 +1,5 @@
-import { NULL_BULK, arrayReply, bulkString, integerReply } from '../resp.ts';
-import { type Command, type CommandContext, getList, parseInteger } from './types.ts';
+import { NULL_ARRAY, NULL_BULK, arrayReply, bulkString, integerReply } from '../resp.ts';
+import { type Command, type CommandContext, CommandError, getList, parseInteger } from './types.ts';
 
 function push(ctx: CommandContext, args: Buffer[], toFront: boolean): Buffer {
   const key = args[1].toString();
@@ -18,19 +18,31 @@ function push(ctx: CommandContext, args: Buffer[], toFront: boolean): Buffer {
 
 function pop(ctx: CommandContext, args: Buffer[], fromFront: boolean): Buffer {
   const key = args[1].toString();
-  const list = getList(ctx, key);
-  if (!list) return NULL_BULK;
+  if (args.length > 3) throw new CommandError(`ERR wrong number of arguments for '${fromFront ? 'lpop' : 'rpop'}' command`);
 
-  const item = fromFront ? list.shift()! : list.pop()!;
+  const count = args.length === 3 ? parseInteger(args[2]) : null;
+  if (count !== null && count < 0) throw new CommandError('ERR value is out of range, must be positive');
+
+  const list = getList(ctx, key);
+  if (!list) return count === null ? NULL_BULK : NULL_ARRAY;
+
+  if (count === 0) return arrayReply([]);
+
+  const amount = count ?? 1;
+  const taken = fromFront
+    ? list.splice(0, amount)
+    : list.splice(Math.max(0, list.length - amount)).reverse();
   // redis never keeps empty lists around
   if (list.length === 0) ctx.store.delete(key);
-  return bulkString(item);
+
+  if (count === null) return bulkString(taken[0]);
+  return arrayReply(taken.map((item) => bulkString(item)));
 }
 
 const lpush: Command = { arity: -3, write: true, run: (args, ctx) => push(ctx, args, true) };
 const rpush: Command = { arity: -3, write: true, run: (args, ctx) => push(ctx, args, false) };
-const lpop: Command = { arity: 2, write: true, run: (args, ctx) => pop(ctx, args, true) };
-const rpop: Command = { arity: 2, write: true, run: (args, ctx) => pop(ctx, args, false) };
+const lpop: Command = { arity: -2, write: true, run: (args, ctx) => pop(ctx, args, true) };
+const rpop: Command = { arity: -2, write: true, run: (args, ctx) => pop(ctx, args, false) };
 
 const lrange: Command = {
   arity: 4,
