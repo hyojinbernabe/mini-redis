@@ -157,7 +157,12 @@ const mget: Command = {
   arity: -2,
   write: false,
   run(args, ctx) {
-    return arrayReply(args.slice(1).map((arg) => bulkString(getString(ctx, arg.toString()))));
+    const values = args.slice(1).map((arg) => {
+      const value = ctx.store.get(arg.toString());
+      // MGET returns nil for keys of other types instead of an error
+      return bulkString(value?.type === 'string' ? value.data : null);
+    });
+    return arrayReply(values);
   },
 };
 

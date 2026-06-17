@@ -102,7 +102,10 @@ describe('strings', () => {
 
   it('MSET and MGET', () => {
     expect(run(ctx, 'MSET', 'a', '1', 'b', '2')).toBe('+OK\r\n');
-    expect(run(ctx, 'MGET', 'a', 'missing', 'b')).toBe('*3\r\n$1\r\n1\r\n$-1\r\n$1\r\n2\r\n');
+    run(ctx, 'LPUSH', 'list', 'x');
+    expect(run(ctx, 'MGET', 'a', 'missing', 'b', 'list')).toBe(
+      '*4\r\n$1\r\n1\r\n$-1\r\n$1\r\n2\r\n$-1\r\n',
+    );
   });
 });
 
