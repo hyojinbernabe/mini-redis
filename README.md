@@ -65,7 +65,7 @@ The store (`src/store.ts`) is a `Map` of keys to values plus a second `Map` of e
 
 Keys expire two ways, also copied from Redis. Every read checks whether the key has expired and deletes it if so (lazy expiry). On top of that, 10 times a second the server looks at 20 keys that have a TTL, deletes the expired ones, and goes again if more than a quarter of them were expired (active expiry). Without the second part, a key nobody reads again would sit in memory forever.
 
-Persistance lives in `src/aof.ts`. Every write command is appended to `appendonly.aof` in RESP format, and the file gets replayed on startup. Commands with relative times (`SET ... EX 60`, `EXPIRE`) are logged with an absolute timestamp instead, otherwise every restart would reset the TTLs. `appendfsync` decides how often the file is flushed to disk: after every write, once a second, or whenever the OS gets to it. `BGREWRITEAOF` shrinks the file down to one command per key.
+Persistence lives in `src/aof.ts`. Every write command is appended to `appendonly.aof` in RESP format, and the file gets replayed on startup. Commands with relative times (`SET ... EX 60`, `EXPIRE`) are logged with an absolute timestamp instead, otherwise every restart would reset the TTLs. `appendfsync` decides how often the file is flushed to disk: after every write, once a second, or whenever the OS gets to it. `BGREWRITEAOF` shrinks the file down to one command per key.
 
 ## Benchmarks
 
