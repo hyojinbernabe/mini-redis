@@ -22,6 +22,17 @@ OK
 1) "a"
 2) "b"
 3) "c"
+127.0.0.1:6379> HSET profile name hyojin city baguio
+(integer) 2
+127.0.0.1:6379> HGETALL profile
+1) "name"
+2) "hyojin"
+3) "city"
+4) "baguio"
+127.0.0.1:6379> LPUSH user:1 x
+(error) WRONGTYPE Operation against a key holding the wrong kind of value
+127.0.0.1:6379> FOO bar
+(error) ERR unknown command 'FOO', with args beginning with: 'bar'
 ```
 
 ## Running it
